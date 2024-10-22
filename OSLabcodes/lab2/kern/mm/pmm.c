@@ -1,5 +1,6 @@
 #include <default_pmm.h>
 #include <best_fit_pmm.h>
+#include <buddy_system_pmm.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -25,7 +26,7 @@ const size_t nbase = DRAM_BASE / PGSIZE;
 uintptr_t *satp_virtual = NULL;
 // physical address of boot-time page directory
 uintptr_t satp_physical;
-
+uintptr_t freemem;
 // physical memory management
 const struct pmm_manager *pmm_manager;
 
@@ -34,7 +35,7 @@ static void check_alloc_page(void);
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
-    pmm_manager = &best_fit_pmm_manager;
+    pmm_manager = &buddy_system_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
@@ -116,6 +117,11 @@ static void page_init(void) {
     }
 }
 
+
+
+
+
+
 /* pmm_init - initialize the physical memory management */
 void pmm_init(void) {
     // We need to alloc/free the physical memory (granularity is 4KB or other size).
@@ -127,7 +133,9 @@ void pmm_init(void) {
 
     // detect physical memory space, reserve already used memory,
     // then use pmm->init_memmap to create free page list
+    cprintf("init begin\n");
     page_init();
+    cprintf("init end\n");
 
     // use pmm->check to verify the correctness of the alloc/free function in a pmm
     check_alloc_page();

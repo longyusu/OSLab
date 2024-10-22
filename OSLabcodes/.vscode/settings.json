@@ -1,5 +1,10 @@
 {
     "files.associations": {
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "defs.h": "c",
+        "buddy_system_pmm.h": "c",
+        "best_fit_pmm.h": "c",
+        "pmm.h": "c",
+        "mmu.h": "c"
     }
 }

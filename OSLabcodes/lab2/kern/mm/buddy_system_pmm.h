@@ -1,5 +1,5 @@
-#ifndef __KERN_MM_BEST_FIT_PMM_H__
-#define  __KERN_MM_BEST_FIT_PMM_H__
+#ifndef __KERN_MM_BUDDY_SYSTEM_PMM_H__
+#define  __KERN_MM_BUDDY_SYSTEM_PMM_H__
 
 #include <pmm.h>
 

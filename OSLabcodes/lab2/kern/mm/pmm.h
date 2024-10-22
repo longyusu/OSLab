@@ -79,6 +79,7 @@ size_t nr_free_pages(void); // number of free pages
 extern struct Page *pages;
 extern size_t npage;
 extern const size_t nbase;
+extern uintptr_t freemem;
 extern uint64_t va_pa_offset;
 
 static inline ppn_t page2ppn(struct Page *page) { return page - pages + nbase; }
