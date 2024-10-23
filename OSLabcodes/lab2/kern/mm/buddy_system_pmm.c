@@ -69,6 +69,7 @@ struct memtree{
 
 struct memtree* tree;
 int tree_size;
+struct Page* propertypages;
 
 struct Page* memmap(struct Page *base, int pos)
 {
@@ -100,25 +101,25 @@ int getps(int pos)
 
 void memtree_init(struct Page *base, int np)
 {
+    //初始化树
+
+    //构建树
     int size=1;
     while(np>size)
 	{
 		size=size<<1;	
 	} 
     tree_size=2*size-1;
-    //SetPageProperty(base-1);
-    tree = (struct memtree*)(ROUNDUP((void*)pages + sizeof(struct Page) * (npage - nbase),32));
-    //SetPageReserved(base-1);
-    tree[0].page=NULL;
-    for(int i=tree_size - 1;i>=0;i--)
+    tree = (struct memtree*)(ROUNDUP((void*)pages + sizeof(struct Page) * (npage - nbase),32));//在Page数组的后面，32字节对齐
+    for(int i=tree_size - 1;i>=0;i--)//自下到上
     {
-        tree[i].page=memmap(base,i);
-        tree[i].size=getps(i);
+        tree[i].page=memmap(base,i);//初始化page
+        tree[i].size=getps(i);//初始化size
         if(i>=size-1)
         {   
-            tree[i].avail=(i-size+1<np)?1:0;
+            tree[i].avail=(i-size+1<np)?1:0;//叶子节点对应的是一个页，判断是不是属于可分配内存块
         }
-        else{
+        else{//根据孩子节点的属性来初始化
             if(tree[i*2+1].avail+tree[i*2+2].avail==tree[i].size)
             {
                 tree[i].avail=tree[i].size;
@@ -129,29 +130,33 @@ void memtree_init(struct Page *base, int np)
             
         }
     }
-    if(np==size)
+
+    //处理内存块链表
+    if(np==size)//这意味着刚好页的数量是2的次方
     {
         return;
     }
     int pos=1;
-    while(pos<np)
+    while(pos<np)//向左偏的
     {
-        if(tree[pos].avail==tree[pos].size){
+        if(tree[pos].avail==tree[pos].size){//这个地方满了则分出来（都是左孩子），剩下的交由兄弟结点的子节点来里处理内存块链表
             if(tree[pos].page->property==tree[pos].size)
             {
                 break;
             }
+            //分割
             tree[pos+1].page->property=tree[pos].page->property-tree[pos].size;
             tree[pos].page->property=tree[pos].size;
             SetPageProperty(tree[pos].page);
+            //加入全新的两个链表
             list_add(&(tree[pos].page->page_link),&(tree[pos+1].page->page_link));
-            pos+=1;
+            pos+=1;//换到兄弟节点
             assert(tree[pos].avail<tree[pos].size);
-            pos=pos*2+1;
+            pos=pos*2+1;//换到兄弟结点的左孩子
             continue;
         }
         else{
-            pos=pos*2+1;
+            pos=pos*2+1;//发现不满，给自己的左孩子
             continue;
         }
         
@@ -162,41 +167,45 @@ struct Page* get_mem(int n)
 {
     int pos;
     int find_pos=0;
+    //自上向下找
     while(tree[find_pos].avail>=n && find_pos<(tree_size-1)/2)
     {
-        if(tree[find_pos].avail==tree[find_pos].size && tree[find_pos].avail>n)
+        if(tree[find_pos].avail==tree[find_pos].size && tree[find_pos].avail>n)//处理内存块链表
         {
             (tree[find_pos*2+1].page)->property=tree[find_pos*2+1].avail;
             (tree[find_pos*2+2].page)->property=tree[find_pos*2+2].avail;
             SetPageProperty(tree[find_pos*2+2].page);
             list_add(&(tree[find_pos*2+1].page->page_link), &((tree[find_pos*2+2].page)->page_link));
         }
-        if(tree[find_pos*2+1].avail>=n && (tree[find_pos*2+2].avail >= tree[find_pos*2+1].avail || tree[find_pos*2+2].avail<n))
+        if(tree[find_pos*2+1].avail>=n && (tree[find_pos*2+2].avail >= tree[find_pos*2+1].avail || tree[find_pos*2+2].avail<n))//选择左孩子的情况
         {
-            
             find_pos=find_pos*2+1;
             continue;
         }
-        if(tree[find_pos*2+2].avail>=n)
+        if(tree[find_pos*2+2].avail>=n)//选择右孩子
         {
             find_pos=find_pos*2+2;
             continue;
         }
-        
+        //选择自己并退出的情况
         break;
     }
     if(find_pos==0&&tree[find_pos].avail<n)
     {
         return NULL;
     }
+    //设置为这个地方内存块已经被用了
     tree[find_pos].avail=0;
     pos=find_pos;
+    //跟新avail值
     while(pos>0)
     {
         int dpos=(pos-1)/2;
+        //选子节点最大值，因为这条路径下来，父节点不可能是完整的
         tree[dpos].avail=tree[dpos*2+1].avail>tree[dpos*2+2].avail ? tree[dpos*2+1].avail:tree[dpos*2+2].avail;
         pos=dpos;
     }
+    //删除内存块列表对应节点
     list_del(&(tree[find_pos].page->page_link));
     nr_free -= n;
     return tree[find_pos].page;
@@ -254,6 +263,7 @@ static void
 buddy_system_init_memmap(struct Page *base, size_t n) {
     assert(n > 0);
     struct Page *p = base;
+    propertypages = base;
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
         p->flags = p->property = 0;
@@ -289,7 +299,6 @@ buddy_system_alloc_pages(size_t n) {
     }
     struct Page *page = NULL;
     list_entry_t *le = &free_list;
-    //找到最近的2次方
     int size=1;
     while(n>size)
 	{
@@ -299,7 +308,6 @@ buddy_system_alloc_pages(size_t n) {
     if (page != NULL) {
         ClearPageProperty(page);
     }
-    //assert(PageProperty(page));
     return page;
 }
 
@@ -335,6 +343,7 @@ buddy_system_free_pages(struct Page *base, size_t n) {
             }
         }
     }
+    //处理好树和链表
     free_mem(base,size);
     return;
 }
@@ -350,14 +359,12 @@ basic_check(void) {
     cprintf("%d\n",nr_free);
     size_t nr_s=nr_free;
     p0 = p1 = p2 = NULL;
-    //cprintf("get mem!");
     assert((p0 = alloc_pages(4)) != NULL);
     cprintf("%d\n",nr_free);
     assert((p1 = alloc_page()) != NULL);
     cprintf("%d\n",nr_free);
     assert((p2 = alloc_page()) != NULL);
     cprintf("%d\n",nr_free);
-    //cprintf("get mem!");
     assert(p0 != p1 && p0 != p2 && p1 != p2);
     assert(page_ref(p0) == 0 && page_ref(p1) == 0 && page_ref(p2) == 0);
 
@@ -411,11 +418,18 @@ buddy_system_check(void) {
     // 分配过大的页数
     assert(alloc_pages(all_pages + 1) == NULL);
     // 分配两个组页
+
+    //在实验里发现了可分配page数量不是2的次方
+    //这里是验证是不是正确选择了合适的页
+    //因为不是2的次方，根据分配策略p0较小应该是在后面的内存块，而p1是在最前面的
+    //如果没有成功执行策略，p1无法获得内存，因为p0的分配分割了第二层左孩子结点对应的内存块，而没有能满足p1大小的内存块。
     p0 = alloc_pages(1);
     assert(p0 != NULL);
     p1 = alloc_pages(all_pages/2);
     assert(p1 != NULL);
+    assert(p1 == propertypages);
     free_pages(p1, all_pages/2);
+    //重新分配p1
     p1 = alloc_pages(2);
     //free_pages(p1, 2);
     //assert(p1 == p0 + 2);
@@ -427,7 +441,6 @@ buddy_system_check(void) {
     p3 = alloc_pages(8);
     //assert(p3 == p0 + 8);
     assert(!PageProperty(p3) && !PageProperty(p3 + 7) && PageProperty(p3 + 8));
-    //cprintf("here3\n");
     // 回收页
     free_pages(p1, 2);
     assert(PageProperty(p1));
