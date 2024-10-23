@@ -55,10 +55,10 @@
  *               (5.2) reset the fields of pages, such as p->ref, p->flags (PageProperty)
  *               (5.3) try to merge low addr or high addr blocks. Notice: should change some pages's p->property correctly.
  */
-free_area_t free_area;
+free_area_t bffree_area;
 
-#define free_list (free_area.free_list)
-#define nr_free (free_area.nr_free)
+#define free_list (bffree_area.free_list)
+#define nr_free (bffree_area.nr_free)
 
 static void
 best_fit_init(void) {
@@ -76,7 +76,6 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         set_page_ref(p, 0);
         /*LAB2 EXERCISE 2: YOUR CODE*/ 
         // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
-
     }
     base->property = n;
     SetPageProperty(base);
@@ -116,6 +115,7 @@ best_fit_alloc_pages(size_t n) {
     // 下面的代码是first-fit的部分代码，请修改下面的代码改为best-fit
     // 遍历空闲链表，查找满足需求的空闲页框
     // 如果找到满足需求的页面，记录该页面以及当前找到的最小连续空闲页框数量
+    size_t min_pages = npage;
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
         if (p->property >= n &&(p->property-n)<min) {

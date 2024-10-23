@@ -42,7 +42,7 @@
  *                 (4.1.2) If we find this p, then it' means we find a free block(block size >=n), and the first n pages can be malloced.
  *                     Some flag bits of this page should be setted: PG_reserved =1, PG_property =0
  *                     unlink the pages from free_list
- *                     (4.1.2.1) If (p->property >n), we should re-caluclate number of the the rest of this free block,
+ *                 free_area_t    (4.1.2.1) If (p->property >n), we should re-caluclate number of the the rest of this free block,
  *                           (such as: le2page(le,page_link))->property = p->property - n;)
  *                 (4.1.3)  re-caluclate nr_free (number of the the rest of all free block)
  *                 (4.1.4)  return p
@@ -58,47 +58,39 @@
 // #define free_list (free_area.free_list)
 // #define nr_free (free_area.nr_free)
 
-// static void
-// default_init(void) {
-//     list_init(&free_list);
-//     //free_list用于记录空闲内存块
-//     nr_free = 0;
-//     //当前空闲块的数量
-// }
-// //将空闲页面链表与计数器置为初始状态（链表为空，计数器为0）
+static void
+default_init(void) {
+    list_init(&free_list);
+    nr_free = 0;
+}
 
-// static void
-// default_init_memmap(struct Page *base, size_t n) {
-//     assert(n > 0);
-//     //断言n大于0
-//     struct Page *p = base;
-//     for (; p != base + n; p ++) {
-//         assert(PageReserved(p));
-//         p->flags = p->property = 0;
-//         set_page_ref(p, 0);
-//     }
-//     //初始化当前空闲块的页面信息
-//     base->property = n;
-//     //首页面属性设置为页的总数量
-//     SetPageProperty(base);
-//     nr_free += n;
-//     //当前空闲页的数量
-//     if (list_empty(&free_list)) {
-//         list_add(&free_list, &(base->page_link));
-//     } else {
-//         list_entry_t* le = &free_list;
-//         while ((le = list_next(le)) != &free_list) {
-//             struct Page* page = le2page(le, page_link);
-//             if (base < page) {
-//                 list_add_before(le, &(base->page_link));
-//                 break;
-//             } else if (list_next(le) == &free_list) {
-//                 list_add(le, &(base->page_link));
-//             }
-//         }
-//     }
-//     //将空闲块插入空闲块列表的恰当的位置
-// }
+static void
+default_init_memmap(struct Page *base, size_t n) {
+    assert(n > 0);
+    struct Page *p = base;
+    for (; p != base + n; p ++) {
+        assert(PageReserved(p));
+        p->flags = p->property = 0;
+        set_page_ref(p, 0);
+    }
+    base->property = n;
+    SetPageProperty(base);
+    nr_free += n;
+    if (list_empty(&free_list)) {
+        list_add(&free_list, &(base->page_link));
+    } else {
+        list_entry_t* le = &free_list;
+        while ((le = list_next(le)) != &free_list) {
+            struct Page* page = le2page(le, page_link);
+            if (base < page) {
+                list_add_before(le, &(base->page_link));
+                break;
+            } else if (list_next(le) == &free_list) {
+                list_add(le, &(base->page_link));
+            }
+        }
+    }
+}
 
 // static struct Page *
 // default_alloc_pages(size_t n) {
@@ -216,10 +208,10 @@
 
 //     assert(alloc_page() == NULL);
 
-//     free_page(p0);
-//     free_page(p1);
-//     free_page(p2);
-//     assert(nr_free == 3);
+    free_page(p0);
+    free_page(p1);
+    free_page(p2);
+    assert(nr_free == 3);
 
 //     assert((p0 = alloc_page()) != NULL);
 //     assert((p1 = alloc_page()) != NULL);
@@ -299,22 +291,22 @@
 //     free_list = free_list_store;
 //     free_pages(p0, 5);
 
-//     le = &free_list;
-//     while ((le = list_next(le)) != &free_list) {
-//         struct Page *p = le2page(le, page_link);
-//         count --, total -= p->property;
-//     }
-//     assert(count == 0);
-//     assert(total == 0);
-// }
-// //这个结构体在
-// const struct pmm_manager default_pmm_manager = {
-//     .name = "default_pmm_manager",
-//     .init = default_init,
-//     .init_memmap = default_init_memmap,
-//     .alloc_pages = default_alloc_pages,
-//     .free_pages = default_free_pages,
-//     .nr_free_pages = default_nr_free_pages,
-//     .check = default_check,
-// };
+    le = &free_list;
+    while ((le = list_next(le)) != &free_list) {
+        struct Page *p = le2page(le, page_link);
+        count --, total -= p->property;
+    }
+    assert(count == 0);
+    assert(total == 0);
+}
+//这个结构体在
+const struct pmm_manager default_pmm_manager = {
+    .name = "default_pmm_manager",
+    .init = default_init,
+    .init_memmap = default_init_memmap,
+    .alloc_pages = default_alloc_pages,
+    .free_pages = default_free_pages,
+    .nr_free_pages = default_nr_free_pages,
+    .check = default_check,
+};
 

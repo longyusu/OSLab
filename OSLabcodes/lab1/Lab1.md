@@ -143,20 +143,66 @@ case IRQ_S_TIMER:
 }
 ```
 
-![图 0](images/3831ffd45355f174e7da9b56bd841dc32b7809fc5cbd4e77252f7f14add05154.png)  
+![图 0](image/3831ffd45355f174e7da9b56bd841dc32b7809fc5cbd4e77252f7f14add05154.png)  
 
 终端运行`make qemu`验证，输出10行`100 ticks`后关机：
  
 
-![图 5](images/27210db42a2c28b2ebfb7d5277d7da642d9ec576a901e32bd9cc3da7dd28e848.png)  
+![图 5](image/27210db42a2c28b2ebfb7d5277d7da642d9ec576a901e32bd9cc3da7dd28e848.png)  
 
  
 
 终端运行`make grade`，结果如下：
-![图 2](images/fa4765fa127d39fc30dc77f9af83abaa86b7f3ef06dc0e7dde434139197fbdcf.png)  
+![图 2](image/fa4765fa127d39fc30dc77f9af83abaa86b7f3ef06dc0e7dde434139197fbdcf.png)  
 
 
- 
+ ## 扩展练习 Challenge1：描述与理解中断流程
+1. 描述ucore中处理中断异常的流程（从异常的产生开始），其中mov a0，sp的目的是什么？
+
+回答：目的是将经过宏定义SAVE_ALL按一定顺序压入栈的各个寄存器所构成的结构体trapframe的地址传入函数trap。其中函数trap的参数及定义如下：
+按照RISC-V 的调用协议，a0为下一个调用函数的参数。而trapframe刚压入栈，即栈顶指针即为该结构体的地址。故将sp传递给a0
+
+
+![图 6](image/图片1.png)  
+
+
+2. SAVE_ALL中寄寄存器保存在栈中的位置是什么确定的？
+通过先预留结构体位置，再从栈顶向高地址找到对应位置。
+保存在栈中的相对位置是根据结构trapframe中各个变量的位置决定的，其中有一个变量为gpr的结构体也按顺序在栈中排序。结构如下
+
+
+![图 7](image/图片2.png)  
+
+
+3. 对于任何中断，__alltraps 中都需要保存所有寄存器吗？请说明理由。
+首先通用寄存器保存着当前cpu运算、加载的结果，假如不保存那么先前计算或加载的结果就因可能被覆盖而不可用了；对于栈顶指针寄存器，由于该结构体的大小是确定的，可以直接由当前栈顶指针直接加36回到原来的栈顶位置；对于csr，epc记录上次中断的下一个指令位置，如果处理完中断，要返回继续执行指令则需要该寄存器的值；badaddr存储中断发生位置，需要提供发生异常的位置作为报错信息，但是要是外部中断不需要报错位置，则不一定要传报异常位置；scause存储中断原因，是必须的，因为要根据原因进行不同的处理；Sstatus保存计算机原先的状态，回复计算机时是必须的。
+## 扩增练习 Challenge2：理解上下文切换机制
+1. 在trapentry.S中汇编代码 csrw sscratch, sp；csrrw s0, sscratch, x0实现了什么操作，目的是什么？
+对于第一条指令，由于需要将原来的栈顶指针保存又由于其他寄存器要在压栈时基于新栈顶指针寻址，所以先将栈顶指针存在sscratch这个csr里了；第二条指令是因为，csr不能直接压入栈中，需要先转移到通用寄存器，再压入栈中。
+2. save all里面保存了stval scause这些csr，而在restore all里面却不还原它们？那这样store的意义何在呢？
+这些寄存器是用于处理中断的，由于还原时中断已经被处理完了，这些关于中断的信息就没有作用了，于是也没必要再还原。
+## 扩展练习Challenge3：完善异常中断
+编程完善在触发一条非法指令异常 mret和，在 kern/trap/trap.c的异常处理函数中捕获，并对其进行处理，简单输出异常类型和异常指令触发地址，即“Illegal instruction caught at 0x(地址)”，“ebreak caught at 0x（地址）”与“Exception type:Illegal instruction"，“Exception type: breakpoint”。
+
+对于异常处理的实现如下：
+kern\trap\trap.c
+
+
+![图 8](image/图片3.png)  
+
+对于检验异常处理的代码如下：
+init\init.c:
+
+
+![图 9](image/图片4.png)  
+
+
+而mret指令报错没有完成该指令，则epc没有加4到下一条指令地址所以要更新epc=epc+4；
+由于ebreak指令正常运行但只有两个字节，为了对齐指令，在实现断点异常时指令地址加2。
+效果如下
+
+s
+![图 10](image/图片5.png)  
 
 
 
