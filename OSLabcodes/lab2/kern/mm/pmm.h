@@ -82,32 +82,34 @@ extern const size_t nbase;
 extern uint64_t va_pa_offset;
 
 static inline ppn_t page2ppn(struct Page *page) { return page - pages + nbase; }
-
+//将page类型的指针转化为物理页号
 static inline uintptr_t page2pa(struct Page *page) {
     return page2ppn(page) << PGSHIFT;
 }
-
+//将page指针转化为物理地址
 
 
 static inline int page_ref(struct Page *page) { return page->ref; }
-
+//返回页面的引用计数
 static inline void set_page_ref(struct Page *page, int val) { page->ref = val; }
-
+//设置引用次数
 static inline int page_ref_inc(struct Page *page) {
     page->ref += 1;
     return page->ref;
 }
-
+//引用次数加1
 static inline int page_ref_dec(struct Page *page) {
     page->ref -= 1;
     return page->ref;
 }
+//引用次数减1
 static inline struct Page *pa2page(uintptr_t pa) {
     if (PPN(pa) >= npage) {
         panic("pa2page called with invalid pa");
     }
     return &pages[PPN(pa) - nbase];
 }
+//将物理地址转化为page指针
 static inline void flush_tlb() { asm volatile("sfence.vm"); }
 extern char bootstack[], bootstacktop[]; // defined in entry.S
 
