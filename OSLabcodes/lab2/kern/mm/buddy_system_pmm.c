@@ -58,6 +58,9 @@
  */
 free_area_t bsfree_area;
 
+
+//buddy sys code by 2212225
+
 #define free_list (bsfree_area.free_list)
 #define nr_free (bsfree_area.nr_free)
 
@@ -110,7 +113,7 @@ void memtree_init(struct Page *base, int np)
 		size=size<<1;	
 	} 
     tree_size=2*size-1;
-    tree = (struct memtree*)(ROUNDUP((void*)pages + sizeof(struct Page) * (npage - nbase),32));//在Page数组的后面，32字节对齐
+    tree = (struct memtree*)(ROUNDUP((void*)pages + sizeof(struct Page) * (npage - nbase),4));//在Page数组的后面，32字节对齐
     for(int i=tree_size - 1;i>=0;i--)//自下到上
     {
         tree[i].page=memmap(base,i);//初始化page
