@@ -409,7 +409,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {//
             //logical addr
             if(ret=page_insert(mm->pgdir,page,addr,perm)!=0)
             {
-                cprintf("error:%s",error_string[ret]);
+                return ret;
             }
             //(3) make the page swappable.
             swap_map_swappable(mm,addr,page,0);
