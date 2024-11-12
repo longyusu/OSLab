@@ -85,7 +85,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
         /*LAB3 EXERCISE 4: YOUR CODE*/ 
         // 编写代码
         // 遍历页面链表pra_list_head，查找最早未被访问的页面
-
+        
         // 获取当前页面对应的Page结构指针
         struct Page* page=le2page(curr_ptr,pra_page_link);
         // 如果当前页面未被访问，则将该页面从页面链表中删除，并将该页面指针赋值给ptr_page作为换出页面
@@ -103,6 +103,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
         }
         curr_ptr=curr_ptr->next;
     }
+    cprintf("curr_ptr 0xffffffff%x\n", curr_ptr);
     return 0;
 }
 static int
@@ -142,43 +143,43 @@ _clock_check_swap(void) {
     ++ score; cprintf("grading %d/%d points", score, totalscore);
 #else 
     *(unsigned char *)0x3000 = 0x0c;
-    cprintf("here1");
+    //cprintf("here1");
     assert(pgfault_num==4);
     *(unsigned char *)0x1000 = 0x0a;
-    cprintf("here2");
+    //cprintf("here2");
     assert(pgfault_num==4);
     *(unsigned char *)0x4000 = 0x0d;
-    cprintf("here3");
+    //cprintf("here3");
     assert(pgfault_num==4);
     *(unsigned char *)0x2000 = 0x0b;
-    cprintf("here4");
+    //cprintf("here4");
     assert(pgfault_num==4);
     *(unsigned char *)0x5000 = 0x0e;
-    cprintf("here5");
+    //cprintf("here5");
     assert(pgfault_num==5);
     *(unsigned char *)0x2000 = 0x0b;
-    cprintf("here6");
+    //cprintf("here6");
     assert(pgfault_num==5);
     *(unsigned char *)0x1000 = 0x0a;
-    cprintf("here7");
+    //cprintf("here7");
     assert(pgfault_num==5);
     *(unsigned char *)0x2000 = 0x0b;
-    cprintf("here8");
+    //cprintf("here8");
     assert(pgfault_num==5);
     *(unsigned char *)0x3000 = 0x0c;
-    cprintf("here9");
+    //cprintf("here9");
     assert(pgfault_num==5);
     *(unsigned char *)0x4000 = 0x0d;
-    cprintf("here10");
+    //cprintf("here10");
     assert(pgfault_num==5);
     *(unsigned char *)0x5000 = 0x0e;
-    cprintf("here11");
+    //cprintf("here11");
     assert(pgfault_num==5);
-    cprintf("here12");
+    //cprintf("here12");
     assert(*(unsigned char *)0x1000 == 0x0a);
-    cprintf("here13");
+    //cprintf("here13");
     *(unsigned char *)0x1000 = 0x0a;
-    cprintf("here14");
+    //cprintf("here14");
     assert(pgfault_num==6);
 #endif
     return 0;
