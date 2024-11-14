@@ -407,20 +407,13 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {//
             //addr AND page, setup the
             //map of phy addr <--->
             //logical addr
+            //建立一个Page的phy addr与线性addr la的映射，如果发生错误返回
             if(ret=page_insert(mm->pgdir,page,addr,perm)!=0)
             {
                 return ret;
             }
             //(3) make the page swappable.
             swap_map_swappable(mm,addr,page,0);
-            if(*get_pte(mm->pgdir, page->pra_vaddr, 1)&PTE_V)
-            {
-                *get_pte(mm->pgdir, page->pra_vaddr, 1)^=PTE_V;
-                cprintf("change by my hand");
-            }
-            else{
-                cprintf("have changed");
-            }
             page->pra_vaddr = addr;
         } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n", *ptep);
