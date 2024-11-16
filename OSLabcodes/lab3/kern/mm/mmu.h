@@ -30,9 +30,9 @@
 // +---------+----+---+--------+-------+
 //
 // Sv39 page table entry:
-// +----26---+----9---+----9---+---2----+-------8-------+
-// |  PPN[2] | PPN[1] | PPN[0] |Reserved|D|A|G|U|X|W|R|V|
-// +---------+----+---+--------+--------+---------------+
+// +----10---+----26---+----9---+----9---+---2----+-------8-------+
+// | Reserved|  PPN[2] | PPN[1] | PPN[0] |Reserved|D|A|G|U|X|W|R|V|
+// +---------+---------+----+---+--------+--------+---------------+
 
 // page directory index
 #define PDX1(la) ((((uintptr_t)(la)) >> PDX1SHIFT) & 0x1FF)
@@ -40,19 +40,24 @@
 
 // page table index
 #define PTX(la) ((((uintptr_t)(la)) >> PTXSHIFT) & 0x1FF)
+//上面三行代码用于获取地址中所对应的表项值
 
 // page number field of address
 #define PPN(la) (((uintptr_t)(la)) >> PTXSHIFT)
+//获取物理页号
 
 // offset in page
 #define PGOFF(la) (((uintptr_t)(la)) & 0xFFF)
+//获取到对应的页偏移量
 
 // construct linear address from indexes and offset
 #define PGADDR(d1, d0, t, o) ((uintptr_t)((d1) << PDX1SHIFT | (d0) << PDX0SHIFT | (t) << PTXSHIFT | (o)))
+//构建一个虚拟地址
 
 // address in page table or page directory entry
 #define PTE_ADDR(pte)   (((uintptr_t)(pte) & ~0x3FF) << (PTXSHIFT - PTE_PPN_SHIFT))
 #define PDE_ADDR(pde)   PTE_ADDR(pde)
+//获取页表项的物理页号，并将其放在正确的位置处
 
 /* page directory and page table constants */
 #define NPDEENTRY       512                    // page directory entries per page directory
@@ -87,6 +92,7 @@
 #define READ_WRITE_EXEC (PTE_R | PTE_W | PTE_X | PTE_V)
 
 #define PTE_USER (PTE_R | PTE_W | PTE_X | PTE_U | PTE_V)
+//对页面的权限进行设置
 
 #endif /* !__KERN_MM_MMU_H__ */
 

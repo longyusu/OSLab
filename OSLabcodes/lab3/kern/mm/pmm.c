@@ -12,18 +12,26 @@
 #include <vmm.h>
 #include <riscv.h>
 
-// virtual address of physical page array
+// 指向 Page 结构体数组的指针，该数组存储了物理页面的元数据
 struct Page *pages;
-// amount of physical memory (in pages)
+
+// 客用内存的页面数量
 size_t npage = 0;
+
 // The kernel image is mapped at VA=KERNBASE and PA=info.base
+//这个变量存储了虚拟地址（VA）和物理地址（PA）之间的偏移量
 uint_t va_pa_offset;
+
 // memory starts at 0x80000000 in RISC-V
+//它通常用于确定从哪个页面开始分配内存。
 const size_t nbase = DRAM_BASE / PGSIZE;
 
 // virtual address of boot-time page directory
+//这个变量是一个指向页目录条目（Page Directory Entry, PDE）的指针
 pde_t *boot_pgdir = NULL;
+
 // physical address of boot-time page directory
+//这个变量存储了启动时页目录的物理地址
 uintptr_t boot_cr3;
 
 // physical memory management
@@ -56,7 +64,7 @@ struct Page *alloc_pages(size_t n) {
         local_intr_save(intr_flag);
         { page = pmm_manager->alloc_pages(n); }
         local_intr_restore(intr_flag);
-
+        //
         if (page != NULL || n > 1 || swap_init_ok == 0) break;
 
         extern struct mm_struct *check_mm_struct;
