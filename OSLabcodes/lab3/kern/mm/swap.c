@@ -2,6 +2,7 @@
 #include <swapfs.h>
 #include <swap_fifo.h>
 #include <swap_clock.h>
+#include <swap_lru.h>
 #include <stdio.h>
 #include <string.h>
 #include <memlayout.h>
@@ -204,7 +205,7 @@ check_swap(void)
      struct vma_struct *vma = vma_create(BEING_CHECK_VALID_VADDR, CHECK_VALID_VADDR, VM_WRITE | VM_READ);
      assert(vma != NULL);
 
-     insert_vma_struct(mm, vma);
+     insert_vma_struct(mm, vma);//初始化一块大的虚拟内存
 
      //setup the temp Page Table vaddr 0~4MB
      cprintf("setup Page Table for vaddr 0X1000, so alloc a page\n");
@@ -246,6 +247,7 @@ check_swap(void)
          check_ptep[i]=0;
          check_ptep[i] = get_pte(pgdir, (i+1)*0x1000, 0);
          //cprintf("i %d, check_ptep addr %x, value %x\n", i, check_ptep[i], *check_ptep[i]);
+         //cprintf("%d\n",i);
          assert(check_ptep[i] != NULL);
          assert(pte2page(*check_ptep[i]) == check_rp[i]);
          assert((*check_ptep[i] & PTE_V));          
@@ -253,15 +255,17 @@ check_swap(void)
      cprintf("set up init env for check_swap over!\n");
      // now access the virt pages to test  page relpacement algorithm 
      ret=check_content_access();
+     //cprintf("here2\n");
      assert(ret==0);
      
      //restore kernel mem env
      for (i=0;i<CHECK_VALID_PHY_PAGE_NUM;i++) {
+         //cprintf("here1\n");
          free_pages(check_rp[i],1);
      } 
 
      //free_page(pte2page(*temp_ptep));
-     
+     //cprintf("here\n");
      mm_destroy(mm);
          
      nr_free = nr_free_store;

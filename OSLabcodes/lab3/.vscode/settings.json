@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "error.h": "c",
+        "string.h": "c",
+        "pmm.h": "c"
+    }
+}
