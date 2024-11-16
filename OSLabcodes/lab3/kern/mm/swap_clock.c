@@ -103,7 +103,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
         }
         curr_ptr=curr_ptr->next;
     }
-    cprintf("curr_ptr 0xffffffff%x\n", curr_ptr);
+    cprintf("curr_ptr %p\n", curr_ptr);
     return 0;
 }
 static int
