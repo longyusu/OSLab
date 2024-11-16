@@ -24,9 +24,10 @@ struct pmm_manager {
 
 extern const struct pmm_manager *pmm_manager;
 extern pde_t *boot_pgdir;
+// 初始页目录表的虚拟地址
 extern const size_t nbase;
 extern uintptr_t boot_cr3;
-
+ // 页表基地址的物理地址
 void pmm_init(void);
 
 struct Page *alloc_pages(size_t n);
@@ -63,7 +64,7 @@ void print_pgdir(void);
         }                                                          \
         __m_kva - va_pa_offset;                                    \
     })
-
+//将内核虚拟地址转化为物理地址
 /* *
  * KADDR - takes a physical address and returns the corresponding kernel virtual
  * address. It panics if you pass an invalid physical address.
@@ -77,7 +78,6 @@ void print_pgdir(void);
         }                                                        \
         (void *)(__m_pa + va_pa_offset);                         \
     })
-
 extern struct Page *pages;
 extern size_t npage;
 extern uint_t va_pa_offset;
@@ -86,12 +86,10 @@ static inline ppn_t
 page2ppn(struct Page *page) {
     return page - pages + nbase;
 }
-
 static inline uintptr_t
 page2pa(struct Page *page) {
     return page2ppn(page) << PGSHIFT;
 }
-
 static inline struct Page *
 pa2page(uintptr_t pa) {
     if (PPN(pa) >= npage) {
@@ -99,17 +97,14 @@ pa2page(uintptr_t pa) {
     }
     return &pages[PPN(pa) - nbase];
 }
-
 static inline void *
 page2kva(struct Page *page) {
     return KADDR(page2pa(page));
 }
-
 static inline struct Page *
 kva2page(void *kva) {
     return pa2page(PADDR(kva));
 }
-
 static inline struct Page *
 pte2page(pte_t pte) {
     if (!(pte & PTE_V)) {
@@ -117,22 +112,18 @@ pte2page(pte_t pte) {
     }
     return pa2page(PTE_ADDR(pte));
 }
-
 static inline struct Page *
 pde2page(pde_t pde) {
     return pa2page(PDE_ADDR(pde));
 }
-
 static inline int
 page_ref(struct Page *page) {
     return page->ref;
 }
-
 static inline void
 set_page_ref(struct Page *page, int val) {
     page->ref = val;
 }
-
 static inline int
 page_ref_inc(struct Page *page) {
     page->ref += 1;
@@ -148,16 +139,13 @@ page_ref_dec(struct Page *page) {
 static inline void flush_tlb() {
   asm volatile("sfence.vma");
 }
-
 // construct PTE from a page and permission bits
 static inline pte_t pte_create(uintptr_t ppn, int type) {
   return (ppn << PTE_PPN_SHIFT) | PTE_V | type;
 }
-
 static inline pte_t ptd_create(uintptr_t ppn) {
   return pte_create(ppn, PTE_V);
 }
-
 extern char bootstack[], bootstacktop[];
 
 #endif /* !__KERN_MM_PMM_H__ */
