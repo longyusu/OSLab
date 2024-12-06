@@ -141,8 +141,7 @@ get_proc_name(struct proc_struct *proc) {
 }
 
 // get_pid - alloc a unique pid for process
-static int
-get_pid(void) {
+static intget_pid(void) {
     static_assert(MAX_PID > MAX_PROCESS);
     struct proc_struct *proc;
     list_entry_t *list = &proc_list, *le;
@@ -244,6 +243,7 @@ setup_kstack(struct proc_struct *proc) {
         return 0;
     }
     return -E_NO_MEM;
+    //为每个进程分配两个页的栈空间
 }
 
 // put_kstack - free the memory space of process kernel stack
