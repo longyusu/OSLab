@@ -63,10 +63,13 @@ list_entry_t proc_list;
 
 #define HASH_SHIFT          10
 #define HASH_LIST_SIZE      (1 << HASH_SHIFT)
+//1024
 #define pid_hashfn(x)       (hash32(x, HASH_SHIFT))
+//进程ID的哈希表
 
 // has list for process set based on pid
 static list_entry_t hash_list[HASH_LIST_SIZE];
+//哈希列表
 
 // idle proc
 struct proc_struct *idleproc = NULL;
@@ -80,6 +83,10 @@ static int nr_process = 0;
 void kernel_thread_entry(void);
 void forkrets(struct trapframe *tf);
 void switch_to(struct context *from, struct context *to);
+//上面三个函数均通过汇编语言书写对应entry.s switch.s和trapentry.s
+//分别用来执行进程切换的函数
+//恢复中断帧中的所有寄存器
+//进行上下文切换，主要是结构体proc_struct中的东西，进程上下文
 
 // alloc_proc - alloc a proc_struct and init all fields of proc_struct
 static struct proc_struct *
@@ -106,7 +113,7 @@ alloc_proc(void) {
      proc->pid=-1;
      proc->runs=0;
      proc->kstack=0;
-     proc->need_resched=NULL;
+     proc->need_resched=0;
      proc->parent=NULL;
      proc->mm=NULL;
      memset(&(proc->context),0,sizeof(struct context));
@@ -114,8 +121,6 @@ alloc_proc(void) {
      proc->cr3=boot_cr3;
      proc->flags=0;
      memset(proc->name,0,PROC_NAME_LEN);
-     
-
     }
     return proc;
 }
@@ -175,24 +180,15 @@ get_pid(void) {
 void
 proc_run(struct proc_struct *proc) {
     if (proc != current) {
-        // LAB4:EXERCISE3 YOUR CODE
-        /*
-        * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
-        * MACROs or Functions:
-        *   local_intr_save():        Disable interrupts
-        *   local_intr_restore():     Enable Interrupts
-        *   lcr3():                   Modify the value of CR3 register
-        *   switch_to():              Context switching between two processes
-        */
-       bool flag;
-       local_intr_save(flag);
-       if(flag)
-       {
-            lcr3(proc->cr3);
-            switch_to(current,proc);
-            current=proc;
-       }
-       local_intr_restore(flag);
+       bool intr_flag;
+       struct proc_struct *prev = current, *next = proc;
+       local_intr_save(intr_flag);
+    {
+        current = proc;
+        lcr3(next->cr3);
+        switch_to(&(prev->context), &(next->context));
+    }
+       local_intr_restore(intr_flag);
     }
 }
 
@@ -285,42 +281,26 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
  * @stack:       the parent's user stack pointer. if stack==0, It means to fork a kernel thread.
  * @tf:          the trapframe info, which will be copied to child process's proc->tf
  */
-int
-do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
+int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     int ret = -E_NO_FREE_PROC;
     struct proc_struct *proc;
     if (nr_process >= MAX_PROCESS) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE
-    /*
-     * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
-     * MACROs or Functions:
-     *   alloc_proc:   create a proc struct and init fields (lab4:exercise1)
-     *   setup_kstack: alloc pages with size KSTACKPAGE as process kernel stack
-     *   copy_mm:      process "proc" duplicate OR share process "current"'s mm according clone_flags
-     *                 if clone_flags & CLONE_VM, then "share" ; else "duplicate"
-     *   copy_thread:  setup the trapframe on the  process's kernel stack top and
-     *                 setup the kernel entry point and stack of process
-     *   hash_proc:    add proc into proc hash_list
-     *   get_pid:      alloc a unique pid for process
-     *   wakeup_proc:  set proc->state = PROC_RUNNABLE
-     * VARIABLES:
-     *   proc_list:    the process set's list
-     *   nr_process:   the number of process set
-     */
-
-    //    1. call alloc_proc to allocate a proc_struct
-    //    2. call setup_kstack to allocate a kernel stack for child process
-    //    3. call copy_mm to dup OR share mm according clone_flag
-    //    4. call copy_thread to setup tf & context in proc_struct
-    //    5. insert proc_struct into hash_list && proc_list
-    //    6. call wakeup_proc to make the new child process RUNNABLE
-    //    7. set ret vaule using child proc's pid
-
+    proc = alloc_proc();
+    proc->parent = current;
+    setup_kstack(proc);
+    copy_mm(clone_flags, proc);
+    copy_thread(proc, stack, tf);
+    int pid = get_pid();
+    proc->pid = pid;
+    hash_proc(proc);
+    list_add(&proc_list, &(proc->list_link));
+    nr_process++;
+    proc->state = PROC_RUNNABLE;
+    ret = proc->pid; 
     
-
 fork_out:
     return ret;
 
@@ -335,14 +315,12 @@ bad_fork_cleanup_proc:
 //   1. call exit_mmap & put_pgdir & mm_destroy to free the almost all memory space of process
 //   2. set process' state as PROC_ZOMBIE, then call wakeup_proc(parent) to ask parent reclaim itself.
 //   3. call scheduler to switch to other process
-int
-do_exit(int error_code) {
+int do_exit(int error_code) {
     panic("process exit!!.\n");
 }
 
 // init_main - the second kernel thread used to create user_main kernel threads
-static int
-init_main(void *arg) {
+static int init_main(void *arg) {
     cprintf("this initproc, pid = %d, name = \"%s\"\n", current->pid, get_proc_name(current));
     cprintf("To U: \"%s\".\n", (const char *)arg);
     cprintf("To U: \"en.., Bye, Bye. :)\"\n");
@@ -351,8 +329,7 @@ init_main(void *arg) {
 
 // proc_init - set up the first kernel thread idleproc "idle" by itself and 
 //           - create the second kernel thread init_main
-void
-proc_init(void) {
+void proc_init(void) {
     int i;
 
     list_init(&proc_list);
@@ -388,14 +365,14 @@ proc_init(void) {
     idleproc->need_resched = 1;
     set_proc_name(idleproc, "idle");
     nr_process ++;
-
     current = idleproc;
+    
 
     int pid = kernel_thread(init_main, "Hello world!!", 0);
     if (pid <= 0) {
         panic("create init_main failed.\n");
     }
-
+    
     initproc = find_proc(pid);
     set_proc_name(initproc, "init");
 
@@ -404,8 +381,7 @@ proc_init(void) {
 }
 
 // cpu_idle - at the end of kern_init, the first kernel thread idleproc will do below works
-void
-cpu_idle(void) {
+void cpu_idle(void) {
     while (1) {
         if (current->need_resched) {
             schedule();
