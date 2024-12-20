@@ -378,11 +378,11 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
             assert(npage != NULL);
             int ret = 0;
              if (share)
-            {
-                cprintf("Copy on Write. Sharing the page 0x%x\n", page2kva(page));
-                // 物理页面共享，建立映射关系并设置两个PTE上的标志位为只读
-                page_insert(from, page, start, perm & ~PTE_W);
-                ret = page_insert(to, page, start, perm & ~PTE_W);
+            {   
+                cprintf("Copy on Write. Sharing the page 0x%x\n,物理页0x%x\n", page2kva(page),page2pa(page));
+                // 物理页面共享，建立映射关系并设置两个PTE上的标志位为只读，且标志为COW用途
+                page_insert(from, page, start, (perm | PTE_COW) & ~PTE_W );
+                ret = page_insert(to, page, start, (perm | PTE_COW) & ~PTE_W );//设置是COW
             }
             // 完整拷贝内存
             else
