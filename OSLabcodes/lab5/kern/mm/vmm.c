@@ -217,7 +217,7 @@ dup_mmap(struct mm_struct *to, struct mm_struct *from) {
         //地址空间不够则报错
         insert_vma_struct(to, nvma);
        //否则插入到子进程内存管理链表中
-        bool share = 0;
+        bool share = 1;
         if (copy_range(to->pgdir, from->pgdir, vma->vm_start, vma->vm_end, share) != 0) {
             return -E_NO_MEM;
         }
@@ -475,27 +475,35 @@ int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
          */
         struct Page *page = NULL;
         // 如果试图写入只读页面
-        if (*ptep & PTE_V)
+        if ((*ptep & PTE_V))
         {
-            cprintf("COW: ptep 0x%x, pte 0x%x\n", ptep, *ptep);
             // 只读物理页
             page = pte2page(*ptep);
             // 如果该物理页面被多个进程引用
-            if (page_ref(page) > 1)
+            if (page_ref(page) > 1 && (*ptep & PTE_COW))
             {
                 // 分配页面并设置新地址映射
                 // pgdir_alloc_page -> alloc_page()  page_insert()
+                cprintf("COW %x: ptep 0x%x, pte 0x%x,物理页0x%x\n",page_ref(page), ptep, *ptep, page2pa(pte2page(*ptep)));
+                //设置另外的进程也为
+                //page_insert(mm->pgdir, page, addr, perm);
                 struct Page *newPage = pgdir_alloc_page(mm->pgdir, addr, perm);
                 void *kva_src = page2kva(page);
                 void *kva_dst = page2kva(newPage);
                 // 拷贝数据
                 memcpy(kva_dst, kva_src, PGSIZE);
-            }
+                page_ref_dec(page);//减少一个共享者
+            }   
             // 如果该物理页面只被当前进程所引用
-            else
+            else if(page_ref(page) == 1 && (*ptep & PTE_COW))
             { 
+                cprintf("COW %x: ptep 0x%x, pte 0x%x,物理页0x%x\n",page_ref(page), ptep, *ptep, page2pa(pte2page(*ptep)));
                 // page_insert，保留当前物理页，重设其PTE权限
                 page_insert(mm->pgdir, page, addr, perm);
+            }
+            else
+            {
+            cprintf("error!\n");
             }
         }
         else
