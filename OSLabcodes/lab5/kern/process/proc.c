@@ -13,49 +13,51 @@
 #include <assert.h>
 #include <unistd.h>
 
-/* ------------- process/thread mechanism design&implementation -------------
-(an simplified Linux process/thread mechanism )
-introduction:
-  ucore implements a simple process/thread mechanism. process contains the independent memory sapce, at least one threads
-for execution, the kernel data(for management), processor state (for context switch), files(in lab6), etc. ucore needs to
-manage all these details efficiently. In ucore, a thread is just a special kind of process(share process's memory).
-------------------------------
-process state       :     meaning               -- reason
-    PROC_UNINIT     :   uninitialized           -- alloc_proc
-    PROC_SLEEPING   :   sleeping                -- try_free_pages, do_wait, do_sleep
-    PROC_RUNNABLE   :   runnable(maybe running) -- proc_init, wakeup_proc, 
-    PROC_ZOMBIE     :   almost dead             -- do_exit
 
------------------------------
-process state changing:
-                                            
-  alloc_proc                                 RUNNING
-      +                                   +--<----<--+
-      +                                   + proc_run +
-      V                                   +-->---->--+ 
-PROC_UNINIT -- proc_init/wakeup_proc --> PROC_RUNNABLE -- try_free_pages/do_wait/do_sleep --> PROC_SLEEPING --
-                                           A      +                                                           +
-                                           |      +--- do_exit --> PROC_ZOMBIE                                +
-                                           +                                                                  + 
-                                           -----------------------wakeup_proc----------------------------------
------------------------------
-process relations
-parent:           proc->parent  (proc is children)
-children:         proc->cptr    (proc is parent)
-older sibling:    proc->optr    (proc is younger sibling)
-younger sibling:  proc->yptr    (proc is older sibling)
------------------------------
-related syscall for process:
-SYS_exit        : process exit,                           -->do_exit
-SYS_fork        : create child process, dup mm            -->do_fork-->wakeup_proc
-SYS_wait        : wait process                            -->do_wait
-SYS_exec        : after fork, process execute a program   -->load a program and refresh the mm
-SYS_clone       : create child thread                     -->do_fork-->wakeup_proc
-SYS_yield       : process flag itself need resecheduling, -- proc->need_sched=1, then scheduler will rescheule this process
-SYS_sleep       : process sleep                           -->do_sleep 
-SYS_kill        : kill process                            -->do_kill-->proc->flags |= PF_EXITING
-                                                                 -->wakeup_proc-->do_wait-->do_exit   
-SYS_getpid      : get the process's pid
+/* ------------- 进程/线程机制设计与实现 ------------- 
+(一个简化的 Linux 进程/线程机制) 
+简介：  
+  ucore 实现了一个简单的进程/线程机制。进程包含独立的内存空间，至少一个用于执行的线程，内核数据（用于管理）、处理器状态（用于上下文切换）、文件（lab6中）等。在 ucore 中，线程只是进程的一种特殊形式（共享进程的内存）。  
+  ucore 需要高效地管理所有这些细节。  
+------------------------------  
+进程状态         :        含义                         -- 触发原因  
+    PROC_UNINIT     :   未初始化                     -- alloc_proc  
+    PROC_SLEEPING   :   睡眠状态                     -- try_free_pages, do_wait, do_sleep  
+    PROC_RUNNABLE   :   可运行状态(可能正在运行)     -- proc_init, wakeup_proc  
+    PROC_ZOMBIE     :   即将死亡状态                 -- do_exit  
+
+-----------------------------  
+进程状态转换：  
+
+  alloc_proc                                 RUNNING  
+      +                                   +--<----<--+  
+      +                                   + proc_run +  
+      V                                   +-->---->--+  
+PROC_UNINIT -- proc_init/wakeup_proc --> PROC_RUNNABLE -- try_free_pages/do_wait/do_sleep --> PROC_SLEEPING --  
+                                           A      +                                                           +  
+                                           |      +--- do_exit --> PROC_ZOMBIE                                +  
+                                           +                                                                  +  
+                                           -----------------------wakeup_proc----------------------------------  
+
+-----------------------------  
+进程关系  
+父进程:           proc->parent  (proc 是子进程)  
+子进程:           proc->cptr    (proc 是父进程)  
+老的兄弟进程:      proc->optr    (proc 是更年轻的兄弟进程)  
+年轻的兄弟进程:    proc->yptr    (proc 是更年长的兄弟进程)  
+
+-----------------------------  
+与进程相关的系统调用：  
+SYS_exit        : 进程退出                             -->do_exit  
+SYS_fork        : 创建子进程，复制 mm                  -->do_fork-->wakeup_proc  
+SYS_wait        : 等待进程                             -->do_wait  
+SYS_exec        : fork 后，进程执行一个程序             -->加载一个程序并刷新 mm  
+SYS_clone       : 创建子线程                           -->do_fork-->wakeup_proc  
+SYS_yield       : 进程标记自身需要重新调度             -- proc->need_sched=1, 然后调度器会重新调度该进程  
+SYS_sleep       : 进程进入睡眠                         -->do_sleep  
+SYS_kill        : 杀死进程                             -->do_kill-->proc->flags |= PF_EXITING  
+                                                             -->wakeup_proc-->do_wait-->do_exit  
+SYS_getpid      : 获取进程的 pid  
 
 */
 
@@ -670,28 +672,35 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
     if (!user_mem_check(mm, (uintptr_t)name, len, 0)) {
         return -E_INVAL;
     }
+    //检查该程序是否处于可以访问的范围内
     if (len > PROC_NAME_LEN) {
         len = PROC_NAME_LEN;
     }
-
+   //判断进程名字长度
     char local_name[PROC_NAME_LEN + 1];
     memset(local_name, 0, sizeof(local_name));
     memcpy(local_name, name, len);
-
+   //创建一个本地数组local_name，并将程序名从用户空间复制到该数组中
     if (mm != NULL) {
         cputs("mm != NULL");
         lcr3(boot_cr3);
         if (mm_count_dec(mm) == 0) {
             exit_mmap(mm);
+            //释放当前进程的内存映射
             put_pgdir(mm);
+            //释放页目录
             mm_destroy(mm);
+            //销毁内存管理结构
         }
         current->mm = NULL;
+        //把进程当前占用的内存释放，之后重新分配内存
     }
     int ret;
     if ((ret = load_icode(binary, size)) != 0) {
+        //加载新进程
         goto execve_exit;
     }
+     //把新的程序加载到当前进程里的工作都在load_icode()函数里完成
     set_proc_name(current, local_name);
     return 0;
 
@@ -775,10 +784,14 @@ int
 do_kill(int pid) {
     struct proc_struct *proc;
     if ((proc = find_proc(pid)) != NULL) {
+        //根据进程 ID（pid）查找到目标进程
         if (!(proc->flags & PF_EXITING)) {
             proc->flags |= PF_EXITING;
+            //如果进程尚未进入退出状态，则执行下一步；否则直接返回错误码 
+            //表示该进程已被标记为“即将退出
             if (proc->wait_state & WT_INTERRUPTED) {
                 wakeup_proc(proc);
+                //可被中断的等待状态
             }
             return 0;
         }
@@ -805,6 +818,7 @@ kernel_execve(const char *name, unsigned char *binary, size_t size) {
         : "i"(SYS_exec), "m"(name), "m"(len), "m"(binary), "m"(size)
         : "memory");
     cprintf("ret = %d\n", ret);
+    //人为启用一个中断进行上下文切换
     return ret;
 }
 
@@ -846,6 +860,7 @@ init_main(void *arg) {
     size_t kernel_allocated_store = kallocated();
 
     int pid = kernel_thread(user_main, NULL, 0);
+    //调用内核线程user_main
     if (pid <= 0) {
         panic("create user_main failed.\n");
     }
@@ -853,7 +868,7 @@ init_main(void *arg) {
     while (do_wait(0, NULL) == 0) {
         schedule();
     }
-
+    //等待user_main()退出
     cprintf("all user-mode processes have quit.\n");
     assert(initproc->cptr == NULL && initproc->yptr == NULL && initproc->optr == NULL);
     assert(nr_process == 2);

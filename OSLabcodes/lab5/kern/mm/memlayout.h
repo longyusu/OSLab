@@ -46,10 +46,12 @@
 
 /* All physical memory mapped at this address */
 #define KERNBASE            0xFFFFFFFFC0200000
+//虚拟地址的起始空间
 #define KMEMSIZE            0x7E00000                  // the maximum amount of physical memory
 #define KERNTOP             (KERNBASE + KMEMSIZE)
 
 #define KERNEL_BEGIN_PADDR 0x80200000
+//物理地址的起始位置
 #define KERNEL_BEGIN_VADDR 0xFFFFFFFFC0200000
 #define PHYSICAL_MEMORY_END 0x88000000
 /* *

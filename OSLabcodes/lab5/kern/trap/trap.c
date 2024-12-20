@@ -105,6 +105,7 @@ pgfault_handler(struct trapframe *tf) {
     struct mm_struct *mm;
     if (check_mm_struct != NULL) {
         assert(current == idleproc);
+        //确认当前进程为0号内核进程
         mm = check_mm_struct;
     }
     else {

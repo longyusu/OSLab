@@ -140,6 +140,6 @@ trapframe at 0xffffffffc04b8ee0
   epc      0x008005f0
   tval 0x00c02000
   cause    0x0000000f
-kernel panic at kern/trap/trap.c:248:
+kernel panic at kern/trap/trap.c:249:
     handle pgfault failed. invalid parameter
 

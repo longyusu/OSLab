@@ -10,30 +10,41 @@
 #include <kmalloc.h>
 
 /* 
-  vmm design include two parts: mm_struct (mm) & vma_struct (vma)
-  mm is the memory manager for the set of continuous virtual memory  
-  area which have the same PDT. vma is a continuous virtual memory area.
-  There a linear link list for vma & a redblack link list for vma in mm.
+  虚拟内存管理（vmm）的设计包含两个部分：mm_struct（mm）和 vma_struct（vma）。
+  mm 是用于管理一组连续虚拟内存区域的内存管理器，这些虚拟内存区域共享相同的页目录表（PDT）。
+  vma 是一个连续的虚拟内存区域。
+  在 mm 中使用线性链表和红黑树来管理 vma。
 ---------------
-  mm related functions:
-   golbal functions
-     struct mm_struct * mm_create(void)
+  与 mm 相关的函数：
+   全局函数：
+     struct mm_struct * mm_create(void) 
+       // 创建一个新的 mm 实例
      void mm_destroy(struct mm_struct *mm)
+       // 销毁一个 mm 实例并释放其资源
      int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
+       // 处理页面错误（Page Fault）
 --------------
-  vma related functions:
-   global functions
+  与 vma 相关的函数：
+   全局函数：
      struct vma_struct * vma_create (uintptr_t vm_start, uintptr_t vm_end,...)
+       // 创建一个新的 vma 实例，定义虚拟内存区域的起始和结束地址
      void insert_vma_struct(struct mm_struct *mm, struct vma_struct *vma)
+       // 将一个 vma 插入到 mm 中的管理结构中
      struct vma_struct * find_vma(struct mm_struct *mm, uintptr_t addr)
-   local functions
+       // 在 mm 中查找包含给定地址 addr 的 vma
+   局部函数：
      inline void check_vma_overlap(struct vma_struct *prev, struct vma_struct *next)
+       // 检查两个 vma 是否有地址重叠
 ---------------
-   check correctness functions
+   校验正确性的函数：
      void check_vmm(void);
+       // 检查虚拟内存管理模块的正确性
      void check_vma_struct(void);
+       // 检查 vma 结构的正确性
      void check_pgfault(void);
+       // 检查页面错误处理机制的正确性
 */
+
 
 static void check_vmm(void);
 static void check_vma_struct(void);
@@ -160,10 +171,11 @@ int
 mm_map(struct mm_struct *mm, uintptr_t addr, size_t len, uint32_t vm_flags,
        struct vma_struct **vma_store) {
     uintptr_t start = ROUNDDOWN(addr, PGSIZE), end = ROUNDUP(addr + len, PGSIZE);
+    //将地址对齐
     if (!USER_ACCESS(start, end)) {
         return -E_INVAL;
     }
-
+    //检查地址范围
     assert(mm != NULL);
 
     int ret = -E_INVAL;
@@ -173,7 +185,7 @@ mm_map(struct mm_struct *mm, uintptr_t addr, size_t len, uint32_t vm_flags,
         goto out;
     }
     ret = -E_NO_MEM;
-
+    //检查地址是否重叠
     if ((vma = vma_create(start, end, vm_flags)) == NULL) {
         goto out;
     }
@@ -181,6 +193,7 @@ mm_map(struct mm_struct *mm, uintptr_t addr, size_t len, uint32_t vm_flags,
     if (vma_store != NULL) {
         *vma_store = vma;
     }
+    //插入新创建的vma到vm_struct管理结构
     ret = 0;
 
 out:
@@ -189,18 +202,21 @@ out:
 
 int
 dup_mmap(struct mm_struct *to, struct mm_struct *from) {
+    //源进程与目的进程的虚拟地址分布情况
     assert(to != NULL && from != NULL);
     list_entry_t *list = &(from->mmap_list), *le = list;
+    //获取父进程的虚拟地址块分布链表
     while ((le = list_prev(le)) != list) {
         struct vma_struct *vma, *nvma;
         vma = le2vma(le, list_link);
         nvma = vma_create(vma->vm_start, vma->vm_end, vma->vm_flags);
+        //遍历父进程的所有vma块并将其复制给nvma
         if (nvma == NULL) {
             return -E_NO_MEM;
         }
-
+        //地址空间不够则报错
         insert_vma_struct(to, nvma);
-
+       //否则插入到子进程内存管理链表中
         bool share = 0;
         if (copy_range(to->pgdir, from->pgdir, vma->vm_start, vma->vm_end, share) != 0) {
             return -E_NO_MEM;
@@ -217,10 +233,12 @@ exit_mmap(struct mm_struct *mm) {
     while ((le = list_next(le)) != list) {
         struct vma_struct *vma = le2vma(le, list_link);
         unmap_range(pgdir, vma->vm_start, vma->vm_end);
+        //先解除虚拟地址到物理内存的映射
     }
     while ((le = list_next(le)) != list) {
         struct vma_struct *vma = le2vma(le, list_link);
         exit_range(pgdir, vma->vm_start, vma->vm_end);
+        //在释放物理内存，即释放页表
     }
 }
 
@@ -232,15 +250,17 @@ copy_from_user(struct mm_struct *mm, void *dst, const void *src, size_t len, boo
     memcpy(dst, src, len);
     return 1;
 }
-
+//从用户态拷贝数据到内核态
 bool
 copy_to_user(struct mm_struct *mm, void *dst, const void *src, size_t len) {
     if (!user_mem_check(mm, (uintptr_t)dst, len, 1)) {
         return 0;
+        //进行内存有效性检验与权限检验
     }
     memcpy(dst, src, len);
     return 1;
 }
+//从内核态拷贝数据到用户态
 
 // vmm_init - initialize virtual memory management
 //          - now just call check_vmm to check correctness of vmm
@@ -372,39 +392,34 @@ check_pgfault(void) {
 //page fault number
 volatile unsigned int pgfault_num=0;
 
-/* do_pgfault - interrupt handler to process the page fault execption
- * @mm         : the control struct for a set of vma using the same PDT
- * @error_code : the error code recorded in trapframe->tf_err which is setted by x86 hardware
- * @addr       : the addr which causes a memory access exception, (the contents of the CR2 register)
+/* do_pgfault - 中断处理函数，用于处理页面异常（page fault）
+ * @mm         : 表示使用相同页目录表（PDT）的一组虚拟内存区域（vma）的管理结构
+ * @error_code : 记录在 trapframe->tf_err 中的错误代码，由 x86 硬件设置
+ * @addr       : 引发内存访问异常的地址（即 CR2 寄存器的内容）
  *
- * CALL GRAPH: trap--> trap_dispatch-->pgfault_handler-->do_pgfault
- * The processor provides ucore's do_pgfault function with two items of information to aid in diagnosing
- * the exception and recovering from it.
- *   (1) The contents of the CR2 register. The processor loads the CR2 register with the
- *       32-bit linear address that generated the exception. The do_pgfault fun can
- *       use this address to locate the corresponding page directory and page-table
- *       entries.
- *   (2) An error code on the kernel stack. The error code for a page fault has a format different from
- *       that for other exceptions. The error code tells the exception handler three things:
- *         -- The P flag   (bit 0) indicates whether the exception was due to a not-present page (0)
- *            or to either an access rights violation or the use of a reserved bit (1).
- *         -- The W/R flag (bit 1) indicates whether the memory access that caused the exception
- *            was a read (0) or write (1).
- *         -- The U/S flag (bit 2) indicates whether the processor was executing at user mode (1)
- *            or supervisor mode (0) at the time of the exception.
+ * 调用关系图：trap --> trap_dispatch --> pgfault_handler --> do_pgfault
+ * 处理器通过两项信息提供给 uCore 的 do_pgfault 函数，以帮助诊断异常并从中恢复：
+ *   (1) CR2 寄存器的内容：处理器会将 CR2 寄存器加载为产生异常的32位线性地址。
+ *       do_pgfault 函数可以利用此地址定位对应的页目录项和页表项。
+ *   (2) 栈上的错误代码：页面异常的错误代码格式不同于其他异常。错误代码包含以下三项信息：
+ *         -- P 标志位（bit 0）：指示异常是由于页面不存在（0）还是由于访问权限违规或使用了保留位（1）。
+ *         -- W/R 标志位（bit 1）：指示导致异常的内存访问是读操作（0）还是写操作（1）。
+ *         -- U/S 标志位（bit 2）：指示发生异常时处理器是在用户模式（1）还是内核模式（0）下运行。
  */
+
 int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
-{
+{   //addr触发缺页的虚拟地址
     int ret = -E_INVAL;
     // try to find a vma which include addr
     struct vma_struct *vma = find_vma(mm, addr);
-
+   //查找虚拟内存区域
     pgfault_num++;
     // If the addr is in the range of a mm's vma?
     if (vma == NULL || vma->vm_start > addr)
     {
         cprintf("not valid addr %x, and  can not find it in vma\n", addr);
         goto failed;
+        //无效addr
     }
 
     /* IF (write an existed addr ) OR
@@ -414,10 +429,12 @@ int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
      *    continue process
      */
     uint32_t perm = PTE_U;
+    //初始权限：用户模式可访问
     if (vma->vm_flags & VM_WRITE)
     {
         perm |= READ_WRITE;
     }
+    //如果vma支持写入（VM_WRITE），则额外设置写权限
     addr = ROUNDDOWN(addr, PGSIZE);
 
     ret = -E_NO_MEM;
@@ -428,6 +445,7 @@ int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
     // (notice the 3th parameter '1')
     if ((ptep = get_pte(mm->pgdir, addr, 1)) == NULL)
     {
+        //尝试获取到这个页表项
         cprintf("get_pte in do_pgfault failed\n");
         goto failed;
     }
@@ -439,6 +457,7 @@ int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
+        //为虚拟地址分配一个物理页面
     }
     else
     {
@@ -505,7 +524,14 @@ int do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr)
 failed:
     return ret;
 }
-
+// 确定引发页面缺失的虚拟地址是否合法，并找到对应的虚拟内存区域（VMA）。
+// 根据虚拟地址，获取或创建页表项（PTE）。
+// 根据页表项的状态处理页面缺失：
+// 若页面未映射，分配新页面。
+// 若页面有效但只读，触发写时复制（COW）。
+// 若页面在交换空间，加载页面数据并建立映射。
+// 标记页面可交换。
+// 返回处理结果，成功为0，失败返回对应错误代码。
 
 bool
 user_mem_check(struct mm_struct *mm, uintptr_t addr, size_t len, bool write) {

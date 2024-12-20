@@ -254,33 +254,35 @@ struct Page *get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store) {
 //                - and clean(invalidate) pte which is related linear address la
 // note: PT is changed, so the TLB need to be invalidate
 static inline void page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
-    if (*ptep & PTE_V) {  //(1) check if this page table entry is
+    if (*ptep & PTE_V) {  //(1) 检查这个页是否有效
         struct Page *page =
-            pte2page(*ptep);  //(2) find corresponding page to pte
-        page_ref_dec(page);   //(3) decrease page reference
+            pte2page(*ptep);  //(2) 找到这个页表项所对应的页
+        page_ref_dec(page);   //(3) 使用该页的进程数减一
         if (page_ref(page) ==
-            0) {  //(4) and free this page when page reference reachs 0
+            0) {  //(4) 如果没人使用这个页了，就把这个页释放掉
             free_page(page);
         }
         *ptep = 0;                  //(5) clear second page table entry
-        tlb_invalidate(pgdir, la);  //(6) flush tlb
+        tlb_invalidate(pgdir, la);  //(6) 刷新TLB
     }
 }
 
 void unmap_range(pde_t *pgdir, uintptr_t start, uintptr_t end) {
     assert(start % PGSIZE == 0 && end % PGSIZE == 0);
     assert(USER_ACCESS(start, end));
-
+    //检查页大小是否对齐、以及该页是否可以被访问
     do {
         pte_t *ptep = get_pte(pgdir, start, 0);
         if (ptep == NULL) {
             start = ROUNDDOWN(start + PTSIZE, PTSIZE);
             continue;
         }
+        //若不存在该页则跳过这段地址空间
         if (*ptep != 0) {
             page_remove_pte(pgdir, start, ptep);
         }
         start += PGSIZE;
+        //否则移除该虚拟地址范围所对应的页表项
     } while (start != 0 && start < end);
 }
 
@@ -290,6 +292,7 @@ void exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end) {
 
     uintptr_t d1start, d0start;
     int free_pt, free_pd0;
+    //标志位，是否可以释放页表
     pde_t *pd0, *pt, pde1, pde0;
     d1start = ROUNDDOWN(start, PDSIZE);
     d0start = ROUNDDOWN(start, PTSIZE);
@@ -335,6 +338,7 @@ void exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end) {
         d0start = d1start;
     } while (d1start != 0 && d1start < end);
 }
+//尝试释放掉整个页表
 /* copy_range - copy content of memory (start, end) of one process A to another
  * process B
  * @to:    the addr of process B's Page Directory
@@ -352,6 +356,7 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
     do {
         // call get_pte to find process A's pte according to the addr start
         pte_t *ptep = get_pte(from, start, 0), *nptep;
+        //找到源进程的页表
         if (ptep == NULL) {
             start = ROUNDDOWN(start + PTSIZE, PTSIZE);
             continue;
@@ -362,7 +367,9 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
             if ((nptep = get_pte(to, start, 1)) == NULL) {
                 return -E_NO_MEM;
             }
+            //为其分配一个新页
             uint32_t perm = (*ptep & PTE_USER);
+            //提取用户权限位
             // get page from ptep
             struct Page *page = pte2page(*ptep);
             // alloc a page for process B
@@ -429,16 +436,20 @@ void page_remove(pde_t *pgdir, uintptr_t la) {
 // note: PT is changed, so the TLB need to be invalidate
 int page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm) {
     pte_t *ptep = get_pte(pgdir, la, 1);
+    //获取页表项若不存在就创建一个
     if (ptep == NULL) {
         return -E_NO_MEM;
     }
     page_ref_inc(page);
+    //引用数加一
     if (*ptep & PTE_V) {
         struct Page *p = pte2page(*ptep);
         if (p == page) {
             page_ref_dec(page);
+            //两者相同，这个页已经映射过了将加的引用减回去
         } else {
             page_remove_pte(pgdir, la, ptep);
+            //移除该页表项
         }
     }
     *ptep = pte_create(page2ppn(page), PTE_V | perm);
@@ -459,12 +470,15 @@ struct Page *pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm) {
     struct Page *page = alloc_page();
     if (page != NULL) {
         if (page_insert(pgdir, page, la, perm) != 0) {
+            //设置访问权限
             free_page(page);
             return NULL;
         }
         if (swap_init_ok) {
             if (check_mm_struct != NULL) {
                 swap_map_swappable(check_mm_struct, la, page, 0);
+                //如果其为可交换页面加入可交换页面中进行管理
+                //必要时换出
                 page->pra_vaddr = la;
                 assert(page_ref(page) == 1);
                 // cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x,
